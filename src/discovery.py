@@ -181,9 +181,10 @@ def main():
     args = parser.parse_args()
 
     if args.d:
-        logger.basicConfig(stream=stderr, level=logging.DEBUG)
+        logger.addHandler(logging.StreamHandler(stream=sys.stderr))
+        logger.setLevel(logging.DEBUG)
     else:
-        logger.basicConfig(level=logging.INFO)
+        logger.setLevel(logging.INFO)
     app_id = args.app_id
     name_filter_regex = None if args.name_filter is None else re.compile(args.name_filter)
     rm_addr = args.rm_addr if "://" in args.rm_addr else "http://" + args.rm_addr
