@@ -11,6 +11,7 @@ import sys
 import time
 from functools import partial
 
+logger = logging.getLevelName("discovery")
 
 def flink_cluster_overview(jm_url):
     r = requests.get(jm_url+'/overview')
@@ -109,7 +110,7 @@ def find_flink_log_addresses(app_id, rm_addr):
     prom_addrs = []
     while True:
         app_info = get_yarn_application_info(app_id, rm_addr)
-        logging.debug("Application ID: {}\nApplication Info: {}".format(app_id, app_info))
+        logger.debug("Application ID: {}\nApplication Info: {}".format(app_id, app_info))
         if 'trackingUrl' not in app_info:
             time.sleep(1)
             continue
@@ -120,7 +121,7 @@ def find_flink_log_addresses(app_id, rm_addr):
         overview = flink_cluster_overview(jm_url)
         version = overview['flink-version']
         taskmanagers = overview['taskmanagers']
-        logging.debug("Flink overview: {}\n  Version: {}\n  Task managers: {}".format(overview, version, taskmanagers))
+        logger.debug("Flink overview: {}\n  Version: {}\n  Task managers: {}".format(overview, version, taskmanagers))
 
         if app_info['runningContainers'] == 1:
             print("runningContainers(%d) is 1" % (app_info['runningContainers'],))
@@ -180,9 +181,9 @@ def main():
     args = parser.parse_args()
 
     if args.d:
-        logging.basicConfig(level=logging.DEBUG)
+        logger.basicConfig(stream=stderr, level=logging.DEBUG)
     else:
-        logging.basicConfig(level=logging.INFO)
+        logger.basicConfig(level=logging.INFO)
     app_id = args.app_id
     name_filter_regex = None if args.name_filter is None else re.compile(args.name_filter)
     rm_addr = args.rm_addr if "://" in args.rm_addr else "http://" + args.rm_addr
