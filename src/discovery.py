@@ -3,6 +3,7 @@
 import argparse
 import errno
 import json
+import logging
 import os
 import re
 import requests
@@ -10,7 +11,6 @@ import sys
 import time
 from functools import partial
 
-debug = False
 
 def flink_cluster_overview(jm_url):
     r = requests.get(jm_url+'/overview')
@@ -109,7 +109,7 @@ def find_flink_log_addresses(app_id, rm_addr):
     prom_addrs = []
     while True:
         app_info = get_yarn_application_info(app_id, rm_addr)
-        print(app_info) if debug else None
+        logging.debug("Application ID: {}\nApplication Info: {}".format(app_id, app_info))
         if 'trackingUrl' not in app_info:
             time.sleep(1)
             continue
@@ -120,7 +120,7 @@ def find_flink_log_addresses(app_id, rm_addr):
         overview = flink_cluster_overview(jm_url)
         version = overview['flink-version']
         taskmanagers = overview['taskmanagers']
-        print(overview, version, taskmanagers) if debug else None
+        logging.debug("Flink overview: {}\n  Version: {}\n  Task managers: {}".format(overview, version, taskmanagers))
 
         if app_info['runningContainers'] == 1:
             print("runningContainers(%d) is 1" % (app_info['runningContainers'],))
@@ -179,7 +179,10 @@ def main():
 
     args = parser.parse_args()
 
-    debug = app.d
+    if args.d:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
     app_id = args.app_id
     name_filter_regex = None if args.name_filter is None else re.compile(args.name_filter)
     rm_addr = args.rm_addr if "://" in args.rm_addr else "http://" + args.rm_addr
@@ -224,13 +227,12 @@ def main():
                 removed = set(running_prev.keys()) - set(running_cur.keys())
 
             if len(added) + len(removed) > 0:
-                if debug:
-                    print('====', time.strftime("%c"), '====')
-                    print('# running apps : ', len(running_cur))
-                    print('# added        : ', added)
-                    print('# removed      : ', removed)
+                logging.info('====', time.strftime("%c"), '====')
+                logging.info('# running apps : ', len(running_cur))
+                logging.info('# added        : ', added)
+                logging.info('# removed      : ', removed)
 
-                logs = { key: find_flink_log_addresses(key, rm_addr) for key in running_cur.keys() }
+                logs = { app_id: find_flink_log_addresses(app_id, rm_addr) for app_id in running_cur.keys() }
                 [ logs.pop(key, None) for (key, value) in logs.items() if value is None ]
                 if (target_dir is not None) and len(logs) > 0:
                     generate_logstash_conf(logs)
