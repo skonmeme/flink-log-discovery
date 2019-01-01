@@ -10,6 +10,7 @@ import sys
 import time
 from functools import partial
 
+debug = False
 
 def flink_cluster_overview(jm_url):
     r = requests.get(jm_url+'/overview')
@@ -83,15 +84,6 @@ def flink_taskmanager_prometheus_addr(tm_id, jm_url, version):
     return ''
 
 
-def yarn_application_info(app_id, rm_addr):
-    r = requests.get(rm_addr + '/ws/v1/cluster/apps/' + app_id)
-    if r.status_code != 200:
-        return {}
-
-    decoded = r.json()
-    return decoded['app'] if 'app' in decoded else {}
-
-
 def taskmanager_ids(jm_url):
     r = requests.get(jm_url + '/taskmanagers')
     if r.status_code != 200:
@@ -104,10 +96,20 @@ def taskmanager_ids(jm_url):
     return [tm['id'] for tm in decoded['taskmanagers']]
 
 
+def get_yarn_application_info(app_id, rm_addr):
+    r = requests.get(rm_addr + '/ws/v1/cluster/apps/' + app_id)
+    if r.status_code != 200:
+        return {}
+
+    decoded = r.json()
+    return decoded['app'] if 'app' in decoded else {}
+
+
 def find_flink_log_addresses(app_id, rm_addr):
     prom_addrs = []
     while True:
-        app_info = yarn_application_info(app_id, rm_addr)
+        app_info = get_yarn_application_info(app_id, rm_addr)
+        print(app_info) if debug
         if 'trackingUrl' not in app_info:
             time.sleep(1)
             continue
@@ -118,6 +120,7 @@ def find_flink_log_addresses(app_id, rm_addr):
         overview = flink_cluster_overview(jm_url)
         version = overview['flink-version']
         taskmanagers = overview['taskmanagers']
+        print(overview, version, taskmanagers) if debug
 
         if app_info['runningContainers'] == 1:
             print("runningContainers(%d) is 1" % (app_info['runningContainers'],))
@@ -171,8 +174,12 @@ def main():
                         help='Polling interval to YARN in seconds '
                              'to check applications that are newly added or recently finished. '
                              'Default is 5 seconds.')
+    parser.add_argument('-d', action="store_true",
+                        help='Display debugging messages.')
 
     args = parser.parse_args()
+
+    debug = app.d
     app_id = args.app_id
     name_filter_regex = None if args.name_filter is None else re.compile(args.name_filter)
     rm_addr = args.rm_addr if "://" in args.rm_addr else "http://" + args.rm_addr
@@ -217,10 +224,11 @@ def main():
                 removed = set(running_prev.keys()) - set(running_cur.keys())
 
             if len(added) + len(removed) > 0:
-                print('====', time.strftime("%c"), '====')
-                print('# running apps : ', len(running_cur))
-                print('# added        : ', added)
-                print('# removed      : ', removed)
+                if debug:
+                    print('====', time.strftime("%c"), '====')
+                    print('# running apps : ', len(running_cur))
+                    print('# added        : ', added)
+                    print('# removed      : ', removed)
 
                 logs = { key: find_flink_log_addresses(key, rm_addr) for key in running_cur.keys() }
                 [ logs.pop(key, None) for (key, value) in logs.items() if value is None ]
