@@ -222,7 +222,7 @@ def main():
                 print('# added        : ', added)
                 print('# removed      : ', removed)
 
-                logs = { key: find_flink_log_addresses(value, rm_addr) for (key, value) in running_cur.items() }
+                logs = { key: find_flink_log_addresses(key, rm_addr) for key in running_cur.keys() }
                 [ logs.pop(key, None) for (key, value) in logs.items() if value is None ]
                 if (target_dir is not None) and len(logs) > 0:
                     generate_logstash_conf(logs)
