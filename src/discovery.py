@@ -109,7 +109,7 @@ def find_flink_log_addresses(app_id, rm_addr):
     prom_addrs = []
     while True:
         app_info = get_yarn_application_info(app_id, rm_addr)
-        print(app_info) if debug
+        print(app_info) if debug else None
         if 'trackingUrl' not in app_info:
             time.sleep(1)
             continue
@@ -120,7 +120,7 @@ def find_flink_log_addresses(app_id, rm_addr):
         overview = flink_cluster_overview(jm_url)
         version = overview['flink-version']
         taskmanagers = overview['taskmanagers']
-        print(overview, version, taskmanagers) if debug
+        print(overview, version, taskmanagers) if debug else None
 
         if app_info['runningContainers'] == 1:
             print("runningContainers(%d) is 1" % (app_info['runningContainers'],))
