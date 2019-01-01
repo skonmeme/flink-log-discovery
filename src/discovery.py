@@ -11,7 +11,7 @@ import sys
 import time
 from functools import partial
 
-logger = logging.getLevelName("discovery")
+logger = logging.getLogger("discovery")
 
 def flink_cluster_overview(jm_url):
     r = requests.get(jm_url+'/overview')
@@ -176,15 +176,20 @@ def main():
                              'to check applications that are newly added or recently finished. '
                              'Default is 5 seconds.')
     parser.add_argument('-d', action="store_true",
-                        help='Display debugging messages.')
+                        help='Display debugging messages (with -v).')
+    parser.add_argument('-v', action="store_true",
+                        help='Display verbose messages.')
 
     args = parser.parse_args()
 
     if args.d:
-        logger.addHandler(logging.StreamHandler(stream=sys.stderr))
+        args.v = True
         logger.setLevel(logging.DEBUG)
     else:
         logger.setLevel(logging.INFO)
+    if args.v:
+        logger.addHandler(logging.StreamHandler(stream=sys.stderr))
+        
     app_id = args.app_id
     name_filter_regex = None if args.name_filter is None else re.compile(args.name_filter)
     rm_addr = args.rm_addr if "://" in args.rm_addr else "http://" + args.rm_addr
