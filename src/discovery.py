@@ -104,7 +104,7 @@ def taskmanager_ids(jm_url):
     return [tm['id'] for tm in decoded['taskmanagers']]
 
 
-def prometheus_addresses(app_id, rm_addr):
+def find_flink_log_addresses(app_id, rm_addr):
     prom_addrs = []
     while True:
         app_info = yarn_application_info(app_id, rm_addr)
@@ -124,8 +124,9 @@ def prometheus_addresses(app_id, rm_addr):
             time.sleep(1)
             continue
 
-        if app_info['runningContainers'] != taskmanagers+1:
-            print("runningContainers(%d) != jobmanager(1)+taskmanagers(%d)" % (app_info['runningContainers'], taskmanagers))
+        if app_info['runningContainers'] != taskmanagers + 1:
+            print("runningContainers(%d) != jobmanager(1)+taskmanagers(%d)" % (
+            app_info['runningContainers'], taskmanagers))
             time.sleep(1)
             continue
 
@@ -149,6 +150,9 @@ def prometheus_addresses(app_id, rm_addr):
     encoded = json.JSONEncoder().encode([{'targets': prom_addrs}])
     return encoded
 
+
+def generate_logstash_conf(logs):
+    print logs
 
 def main():
     parser = argparse.ArgumentParser(description='Discover Flink clusters on Hadoop YARN for Prometheus')
@@ -180,17 +184,15 @@ def main():
         sys.exit(1)
 
     if app_id is not None:
-        target_string = prometheus_addresses(app_id, rm_addr)
-        if target_dir is not None:
-            path = os.path.join(target_dir, app_id+".json")
-            with open(path, 'w') as f:
-                print(path + " : " + target_string)
-                f.write(target_string)
+        logs = {}
+        logs[app_id] = find_flink_log_addresses(app_id, rm_addr)
+        if (target_dir is not None) and (logs[app_id] is not None):
+            generate_logstash_conf(logs)
         else:
-            print(target_string)
+            print(logs)
     else:
         print("start polling every " + str(args.poll_interval) + " seconds.")
-        running_prev = None
+        running_prev = {}
         while True:
             running_cur = {}
             added = set()
@@ -210,37 +212,22 @@ def main():
                 if app['state'].lower() == 'running':
                     running_cur[app['id']] = app
 
-            if running_prev is not None:
+            if running_prev != running_cur:
                 added = set(running_cur.keys()) - set(running_prev.keys())
                 removed = set(running_prev.keys()) - set(running_cur.keys())
 
-            print len(added) + len(removed)
             if len(added) + len(removed) > 0:
                 print('====', time.strftime("%c"), '====')
                 print('# running apps : ', len(running_cur))
                 print('# added        : ', added)
                 print('# removed      : ', removed)
 
-#                for app_id in added:
-#                    target_string = prometheus_addresses(app_id, rm_addr)
-#                    if target_dir is not None:
-#                        path = os.path.join(target_dir, app_id + ".json")
-#                        with open(path, 'w') as f:
-#                            print(path, " : ", target_string)
-#                            f.write(target_string)
-#                    else:
-#                        print(target_string)
-#
-#                for app_id in removed:
-#                    if target_dir is not None:
-#                        path = os.path.join(target_dir, app_id + ".json")
-#                        print(path + " deleted")
-#                        try:
-#                            os.remove(path)
-#                        except OSError as e:
-#                            if e.errno != errno.ENOENT:
-#                                # re-raise exception if a different error occurred
-#                                raise
+                logs = { key: find_flink_log_addresses(value, rm_addr) for (key, value) in running_cur.items() }
+                [ logs.pop(key, None) for (key, value) in logs.items() if value is None ]
+                if (target_dir is not None) and len(logs) > 0:
+                    generate_logstash_conf(logs)
+                else:
+                    print(logs)
 
             running_prev = running_cur
             time.sleep(args.poll_interval)
