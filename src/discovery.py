@@ -214,6 +214,7 @@ def main():
                 added = set(running_cur.keys()) - set(running_prev.keys())
                 removed = set(running_prev.keys()) - set(running_cur.keys())
 
+            print len(added) + len(removed)
             if len(added) + len(removed) > 0:
                 print('====', time.strftime("%c"), '====')
                 print('# running apps : ', len(running_cur))
