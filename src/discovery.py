@@ -45,11 +45,11 @@ def get_taskmanager_ids(jm_url):
 
 def find_flink_log_addresses(app_id, rm_addr):
     count = 1
-    logs = {}
+    logs = {'app_id': app_id}
 
     while True:
         if count > 10:
-            return {}
+            return None
 
         app_info = get_yarn_application_info(app_id, rm_addr)
         logger.debug("Application ID: {}\nApplication Info: {}".format(app_id, app_info))
@@ -186,9 +186,9 @@ if __name__ == '__main__':
         sys.exit(1)
 
     if app_id is not None:
-        log_url = {app_id: find_flink_log_addresses(app_id, rm_addr)}
-        if log_url[app_id] != {}:
-            generate_logstash_conf(log_url, target_path, es_addr)
+        log = find_flink_log_addresses(app_id, rm_addr)
+        if log is not None:
+            generate_logstash_conf([log], target_path, es_addr)
     else:
         logger.info("start polling every " + str(args.poll_interval) + " seconds.")
         running_prev = {}
@@ -221,8 +221,8 @@ if __name__ == '__main__':
                 logger.info("{} added        : ".format(added))
                 logger.info("{} removed      : ".format(removed))
 
-                logs = { app_id: find_flink_log_addresses(app_id, rm_addr) for app_id in running_cur.keys() }
-                [ logs.pop(key, None) for (key, value) in logs.items() if value == {} ]
+                logs = filter(lambda x: x is not None,
+                              [ find_flink_log_addresses(app_id, rm_addr) for app_id in running_cur.keys() ])
                 if len(logs) > 0:
                     generate_logstash_conf(logs, target_path, es_addr)
 
