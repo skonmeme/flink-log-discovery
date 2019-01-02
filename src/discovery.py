@@ -92,44 +92,44 @@ def find_flink_log_addresses(app_id, rm_addr):
 
 def generate_logstash_conf(logs, target_path, es_addr):
     # intput
-    logstash_conf =          "\{\n" \
-                             "  input \{\n"
+    logstash_conf =          "{\n"
+    logstash_conf +=         "  input {\n"
     for log in logs:
-        logstash_conf +=     "    http_poller \{\n" \
-                             "      type => \"{}\"".format(log['app_id']) + "\n" \
-                             "      urls => \{\n" \
-                             "        url => {}".format(log['jm_log']['url']) + "\n" \
-                             "      \}\n" \
-                             "    \}\n"
+        logstash_conf +=     "    http_poller {\n"
+        logstash_conf +=     "      type => \"{}\"\n".format(log['app_id'])
+        logstash_conf +=     "      urls => {\n"
+        logstash_conf +=     "        url => {}\n".format(log['jm_log']['url'])
+        logstash_conf +=     "      }\n"
+        logstash_conf +=     "    }\n"
         for tm_log in log['tm_log']:
-            logstash_conf += "    http_poller \{\n" \
-                             "      type => \"{}-{}\"".format(log['app_id'], tm_log['id']) + "\n" \
-                             "      urls => \{\n" \
-                             "        url => {}".format(tm_log['url']) + "\n" \
-                             "      \}\n" \
-                             "    \}\n"
-    logstash_conf +=         "  \}\n"
+            logstash_conf += "    http_poller {\n"
+            logstash_conf += "      type => \"{}-{}\"\n".format(log['app_id'], tm_log['id'])
+            logstash_conf += "      urls => {\n"
+            logstash_conf += "        url => {}\n".format(tm_log['url'])
+            logstash_conf += "      }\n"
+            logstash_conf += "    }\n"
+    logstash_conf +=         "  }\n"
 
     # filter
 
     # output
     logstash_conf +=         "  output {\n"
     for log in logs:
-        logstash_conf +=     "    if [type] == {} \{".format(log['app_id']) + "\n" \
-                             "      elasticsearch \{\n" \
-                             "        host => {}".format(es_addr) + "\n" \
-                             "        index => flink-{}".format(log['app_id']) + "\n" \
-                             "      \}\n" \
-                             "    \}\n"
+        logstash_conf +=     "    if [type] == {} {\n".format(log['app_id'])
+        logstash_conf +=     "      elasticsearch {\n"
+        logstash_conf +=     "        host => {}\n".format(es_addr)
+        logstash_conf +=     "        index => flink-{}\n".format(log['app_id'])
+        logstash_conf +=     "      }\n"
+        logstash_conf +=     "    }\n"
         for tm_log in log['tm_logs']:
-            logstash_conf += "    if [type] == \"{}-{}\" \{".format(log['app_id'], tm_log['id']) + "\n" \
-                             "      elasticsearch \{\n" \
-                             "        host => {}".format(es_addr) + "\n" \
-                             "        index => flink-{}-{}".format(log['app_id'], tm_log['id']) + "\n" \
-                             "      \}\n" \
-                             "    \}\n"
-    logstash_conf +=         "  \}\n" \
-                             "\}"
+            logstash_conf += "    if [type] == \"{}-{}\" {\n".format(log['app_id'], tm_log['id'])
+            logstash_conf += "      elasticsearch {\n"
+            logstash_conf += "        host => {}\n".format(es_addr)
+            logstash_conf += "        index => flink-{}-{}\n".format(log['app_id'], tm_log['id'])
+            logstash_conf += "      }\n"
+            logstash_conf += "    }\n"
+    logstash_conf +=         "  }\n"
+    logstash_conf +=         "\}"
 
     if target_path is not None:
         with open(target_path, 'w') as file:
