@@ -45,7 +45,7 @@ def get_taskmanager_ids(jm_url):
 
 def find_flink_log_addresses(app_id, rm_addr):
     count = 1
-    log_url = {}
+    logs = {}
 
     while True:
         if count > 10:
@@ -61,14 +61,14 @@ def find_flink_log_addresses(app_id, rm_addr):
 
         jm_url = app_info['trackingUrl']
         jm_url = jm_url[:-1] if jm_url.endswith('/') else jm_url
-        log_url['jm_url'] = jm_url
+        logs['jm_url'] = {'url': jm_url}
 
         overview = get_flink_cluster_overview(jm_url)
         version = overview['flink-version']
         taskmanagers = overview['taskmanagers']
         logger.debug("Flink overview: {}\n  Version: {}\n  Task managers: {}".format(overview, version, taskmanagers))
 
-        log_url['jm_log_url'] = jm_url + "/jobmanager/log"
+        logs['jm_log'] = {'url': jm_url + "/jobmanager/log"}
 
         if app_info['runningContainers'] == 1:
             logger.info("runningContainers(%d) is 1" % (app_info['runningContainers'],))
@@ -83,46 +83,47 @@ def find_flink_log_addresses(app_id, rm_addr):
             continue
 
         tm_ids = get_taskmanager_ids(jm_url)
-        log_url['tm_log_urls'] = [ jm_url + "/taskmanagers/" + tm_id + "/log" for tm_id in tm_ids ]
+        logs['tm_logs'] = [ {'id': tm_id, 'url': jm_url + "/taskmanagers/" + tm_id + "/log"} for tm_id in tm_ids ]
         break
-    logger.debug(log_url)
+    logger.debug(logs)
 
-    return log_url
+    return logs
 
 
-def generate_logstash_conf(log_urls, target_path, es_addr):
+def generate_logstash_conf(logs, target_path, es_addr):
     # intput
     logstash_conf =          "{\n" \
                              "  input {\n"
-    for log_url in log_urls:
+    for log in logs:
         logstash_conf +=     "    http_poller {\n" \
-                             "      type => \"{}\"".format(log_url['app_id']) + "\n" \
-                             "      urls => {" \
-                             "        url => {}".format(log_url['jm_log_url']) + "\n" \
+                             "      type => \"{}\"".format(log['app_id']) + "\n" \
+                             "      urls => {\n" \
+                             "        url => {}".format(log['jm_log']['url']) + "\n" \
                              "      }\n" \
                              "    }\n"
-        for tm_log_url in log_url['tm_log_urls']:
+        for tm_log in log['tm_log']:
             logstash_conf += "    http_poller {\n" \
-                             "      type => \"{}-taskmanager\"".format(log_url['app_id']) + "\n" \
-                             "      urls => {" \
-                             "        url => {}".format(tm_log_url) + "\n" \
+                             "      type => \"{}-{}\"".format(log['app_id'], tm_log['id']) + "\n" \
+                             "      urls => {\n" \
+                             "        url => {}".format(tm_log['url']) + "\n" \
                              "      }\n" \
                              "    }\n"
     logstash_conf +=         "  }\n"
     # filter
     # output
     logstash_conf +=         "  output {\n"
-    for log_url in log_urls:
-        logstash_conf +=     "    if [type] == {} {".format(log_url['app_id']) + "\n" \
+    for log in logs:
+        logstash_conf +=     "    if [type] == {} {".format(log['app_id']) + "\n" \
                              "      elasticsearch {\n" \
                              "        host => {}".format(es_addr) + "\n" \
-                             "        index => flink-{}".format(log_url['app_id']) + "\n" \
+                             "        index => flink-{}".format(log['app_id']) + "\n" \
                              "      }\n" \
                              "    }\n"
-    logstash_conf +=         "    if [type] == \"{}-taskmanager\" {".format(log_url['app_id']) + "\n" \
+        for tm_log in log['tm_logs']:
+            logstash_conf += "    if [type] == \"{}-{}\" {".format(log['app_id'], tm_log['id']) + "\n" \
                              "      elasticsearch {\n" \
                              "        host => {}".format(es_addr) + "\n" \
-                             "        index => flink-{}".format(log_url['app_id']) + "\n" \
+                             "        index => flink-{}-{}".format(log['app_id'], tm_log['id']) + "\n" \
                              "      }\n" \
                              "    }\n"
     logstash_conf +=         "  }\n" \
@@ -137,7 +138,7 @@ def generate_logstash_conf(log_urls, target_path, es_addr):
     return logstash_conf
 
 
-def main():
+if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Discover Flink clusters on Hadoop YARN for Prometheus')
     parser.add_argument('rm_addr', type=str,
                         help='(required) Specify yarn.resourcemanager.webapp.address of your YARN cluster.')
@@ -183,8 +184,7 @@ def main():
         sys.exit(1)
 
     if app_id is not None:
-        log_url = {}
-        log_url[app_id] = find_flink_log_addresses(app_id, rm_addr)
+        log_url = {app_id: find_flink_log_addresses(app_id, rm_addr)}
         if log_url[app_id] != {}:
             generate_logstash_conf(log_url, target_path, es_addr)
     else:
@@ -219,14 +219,10 @@ def main():
                 logger.info("{} added        : ".format(added))
                 logger.info("{} removed      : ".format(removed))
 
-                log_urls = { app_id: find_flink_log_addresses(app_id, rm_addr) for app_id in running_cur.keys() }
-                [ log_urls.pop(key, None) for (key, value) in log_urls.items() if value == {} ]
-                if len(log_urls) > 0:
-                    generate_logstash_conf(log_urls, target_path, es_addr)
+                logs = { app_id: find_flink_log_addresses(app_id, rm_addr) for app_id in running_cur.keys() }
+                [ logs.pop(key, None) for (key, value) in logs.items() if value == {} ]
+                if len(logs) > 0:
+                    generate_logstash_conf(logs, target_path, es_addr)
 
             running_prev = running_cur
             time.sleep(args.poll_interval)
-
-
-if __name__ == '__main__':
-    main()
