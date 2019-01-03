@@ -98,6 +98,8 @@ def generate_url_output(logs):
             output += tm_id + '\t' + tm_log['url'] + '\n'
         output += '_\t_\n'
 
+    return output
+
 
 def keep_tracking_flink(rm_addr, options):
     logger.info("start polling every " + str(args.poll_interval) + " seconds.")
