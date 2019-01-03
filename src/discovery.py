@@ -83,82 +83,72 @@ def find_flink_log_addresses(app_id, rm_addr):
             continue
 
         tm_ids = get_taskmanager_ids(jm_url)
-        logs['tm_logs'] = [ {'id': tm_id, 'url': jm_url + "/taskmanagers/" + tm_id + "/log"} for tm_id in tm_ids ]
+        logs['tm_logs'] = { tm_id: {'url': jm_url + "/taskmanagers/" + tm_id + "/log"} for tm_id in tm_ids }
         break
     logger.debug(logs)
 
     return logs
 
 
-def generate_logstash_conf(logs, target_path, es_addr):
-    # intput
-    logstash_conf =          "{\n"
-    logstash_conf +=         "  input {\n"
-    for log in logs:
-        logstash_conf +=     "    http_poller {\n"
-        logstash_conf +=     "      type => \"{}\"\n".format(log['app_id'])
-        logstash_conf +=     "      urls => {\n"
-        logstash_conf +=     "        url => {}\n".format(log['jm_log']['url'])
-        logstash_conf +=     "      }\n"
-        logstash_conf +=     "    }\n"
-        for tm_log in log['tm_log']:
-            logstash_conf += "    http_poller {\n"
-            logstash_conf += "      type => \"{}-{}\"\n".format(log['app_id'], tm_log['id'])
-            logstash_conf += "      urls => {\n"
-            logstash_conf += "        url => {}\n".format(tm_log['url'])
-            logstash_conf += "      }\n"
-            logstash_conf += "    }\n"
-    logstash_conf +=         "  }\n"
+def write_log_urls(file, logs, db_dir):
+    with open(args.db_dir + "/logs.db", 'w') as file:
+        file.write(rm_addr)
+        for log in logs:
+            file.write(log['app_id'])
+            file.write(log['jm_log']['url'])
+            for (tm_id, tm_log) in logs['tm_logs'].items():
+                file.write(tm_id + '\t' + tm_log['url'])
 
-    # filter
 
-    # output
-    logstash_conf +=         "  output {\n"
-    for log in logs:
-        logstash_conf +=     "    if [type] == {} {\n".format(log['app_id'])
-        logstash_conf +=     "      elasticsearch {\n"
-        logstash_conf +=     "        host => {}\n".format(es_addr)
-        logstash_conf +=     "        index => flink-{}\n".format(log['app_id'])
-        logstash_conf +=     "      }\n"
-        logstash_conf +=     "    }\n"
-        for tm_log in log['tm_logs']:
-            logstash_conf += "    if [type] == \"{}-{}\" {\n".format(log['app_id'], tm_log['id'])
-            logstash_conf += "      elasticsearch {\n"
-            logstash_conf += "        host => {}\n".format(es_addr)
-            logstash_conf += "        index => flink-{}-{}\n".format(log['app_id'], tm_log['id'])
-            logstash_conf += "      }\n"
-            logstash_conf += "    }\n"
-    logstash_conf +=         "  }\n"
-    logstash_conf +=         "\}"
+def keep_tracking_flink(rm_addr, options):
+    logger.info("start polling every " + str(args.poll_interval) + " seconds.")
 
-    if target_path is not None:
-        with open(target_path, 'w') as file:
-            file.write(logstash_conf)
-    else:
-        print(logstash_conf)
-
-    return logstash_conf
+    running_prev = {}
+    while True:
+        running_cur = {}
+        added = set()
+        removed = set()
+        r = requests.get(rm_addr + '/ws/v1/cluster/apps')
+        if r.status_code != 200:
+            logger.error("Failed to connect to the server."
+                         "The status code is " + r.status_code)
+            break
+        decoded = r.json()
+        apps = decoded['apps']['app']
+        for app in apps:
+            if app['state'].lower() == 'running':
+                running_cur[app['id']] = app
+        if running_prev != running_cur:
+            added = set(running_cur.keys()) - set(running_prev.keys())
+            removed = set(running_prev.keys()) - set(running_cur.keys())
+        if len(added) + len(removed) > 0:
+            logger.info('==== {} ===='.format(time.strftime("%c")))
+            logger.info("{} running apps : ".format(len(running_cur)))
+            logger.info("{} added        : ".format(added))
+            logger.info("{} removed      : ".format(removed))
+            logs = filter(lambda x: x is not None,
+                          [find_flink_log_addresses(app_id, rm_addr) for app_id in running_cur.keys()])
+            if len(logs) > 0:
+                if args.db_dir is not None:
+                    with open(args.db_dir + '/logs.db', 'w') as file:
+                        write_log_urls(file, logs)
+                else:
+                    write_log_urls(sys.stdout, logs)
+        running_prev = running_cur
+        time.sleep(args.poll_interval)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Discover Flink clusters on Hadoop YARN for Prometheus')
     parser.add_argument('rm_addr', type=str,
                         help='(required) Specify yarn.resourcemanager.webapp.address of your YARN cluster.')
-    parser.add_argument('es_addr', type=str,
-                        help='(required) Specify ElasticSearch address.')
-    parser.add_argument('--app-id', type=str,
-                        help='If specified, this program runs once for the application. '
-                             'Otherwise, it runs as a service.')
-    parser.add_argument('--name-filter', type=str,
-                        help='A regex to specify applications to watch.')
-    parser.add_argument('--target-path', type=str,
-                        help='If specified, this program writes the target information to a file on the directory. '
-                             'Files are named after the application ids. '
-                             'Otherwise, it prints to stdout.')
-    parser.add_argument('--poll-interval', type=int, default=15,
+    parser.add_argument('--poll-interval', type=int, default=5,
                         help='Polling interval to YARN in seconds '
                              'to check applications that are newly added or recently finished. '
-                             'Default is 5 seconds.')
+                             'Default is 60 seconds.')
+    parser.add_argument('--db-dir', type=str,
+                        help='If specified, this program keeps tracking log URLs in this directory. '
+                             'If not specified, discovered log URLs are printed out.')
     parser.add_argument('-d', action="store_true",
                         help='Display debugging messages (with -v).')
     parser.add_argument('-v', action="store_true",
@@ -174,57 +164,11 @@ if __name__ == '__main__':
     if args.v:
         logger.addHandler(logging.StreamHandler(stream=sys.stderr))
 
-    app_id = args.app_id
-    name_filter_regex = None if args.name_filter is None else re.compile(args.name_filter)
     rm_addr = args.rm_addr if "://" in args.rm_addr else "http://" + args.rm_addr
     rm_addr = rm_addr[:-1] if rm_addr.endswith('/') else rm_addr
-    es_addr = args.es_addr
-    target_path = args.target_path
 
-    if target_path is not None and not os.path.isdir(target_path):
-        logger.error('cannot find', target_path)
+    if args.db_dir is not None and not os.path.isdir(args.db_dir):
+        logger.error('cannot find', args.db_dir)
         sys.exit(1)
 
-    if app_id is not None:
-        log = find_flink_log_addresses(app_id, rm_addr)
-        if log is not None:
-            generate_logstash_conf([log], target_path, es_addr)
-    else:
-        logger.info("start polling every " + str(args.poll_interval) + " seconds.")
-        running_prev = {}
-        while True:
-            running_cur = {}
-            added = set()
-            removed = set()
-
-            r = requests.get(rm_addr+'/ws/v1/cluster/apps')
-            if r.status_code != 200:
-                logger.error("Failed to connect to the server."
-                             "The status code is " + r.status_code)
-                break
-
-            decoded = r.json()
-            apps = decoded['apps']['app']
-            if name_filter_regex is not None:
-                apps = list(filter(lambda app: name_filter_regex.match(app['name']), apps))
-            for app in apps:
-                if app['state'].lower() == 'running':
-                    running_cur[app['id']] = app
-
-            if running_prev != running_cur:
-                added = set(running_cur.keys()) - set(running_prev.keys())
-                removed = set(running_prev.keys()) - set(running_cur.keys())
-
-            if len(added) + len(removed) > 0:
-                logger.info('==== {} ===='.format(time.strftime("%c")))
-                logger.info("{} running apps : ".format(len(running_cur)))
-                logger.info("{} added        : ".format(added))
-                logger.info("{} removed      : ".format(removed))
-
-                logs = filter(lambda x: x is not None,
-                              [ find_flink_log_addresses(app_id, rm_addr) for app_id in running_cur.keys() ])
-                if len(logs) > 0:
-                    generate_logstash_conf(logs, target_path, es_addr)
-
-            running_prev = running_cur
-            time.sleep(args.poll_interval)
+    keep_tracking_flink(rm_addr, args)
