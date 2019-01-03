@@ -90,14 +90,13 @@ def find_flink_log_addresses(app_id, rm_addr):
     return logs
 
 
-def write_log_urls(file, logs):
-    file.write(rm_addr, + '\n\n')
+def generate_url_output(logs):
+    output = rm_addr + '\n'
     for log in logs:
-        file.write(log['app_id'] + '\t'+ log['jm_log']['url'] + '\n')
+        output += log['app_id'] + '\t'+ log['jm_log']['url'] + '\n'
         for (tm_id, tm_log) in log['tm_logs'].items():
-            print tm_id, tm_log
-            file.write(tm_id + '\t' + tm_log['url'] + '\n')
-        file.write('_\t_\n')
+            output += tm_id + '\t' + tm_log['url'] + '\n'
+        output += '_\t_\n'
 
 
 def keep_tracking_flink(rm_addr, options):
@@ -129,11 +128,13 @@ def keep_tracking_flink(rm_addr, options):
             logs = filter(lambda x: x is not None,
                           [find_flink_log_addresses(app_id, rm_addr) for app_id in running_cur.keys()])
             if len(logs) > 0:
+                url_output = generate_url_output(logs)
                 if args.db_dir is not None:
                     with open(args.db_dir + '/logs.db', 'w') as file:
-                        write_log_urls(file, logs)
+                        file.write(url_output)
                 else:
-                    write_log_urls(sys.stdout, logs)
+                    print(url_output)
+                logger.debug(url_output)
         running_prev = running_cur
         time.sleep(args.poll_interval)
 
