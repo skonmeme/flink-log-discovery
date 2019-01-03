@@ -90,14 +90,14 @@ def find_flink_log_addresses(app_id, rm_addr):
     return logs
 
 
-def write_log_urls(file, logs, db_dir):
-    with open(args.db_dir + "/logs.db", 'w') as file:
-        file.write(rm_addr)
-        for log in logs:
-            file.write(log['app_id'])
-            file.write(log['jm_log']['url'])
-            for (tm_id, tm_log) in logs['tm_logs'].items():
-                file.write(tm_id + '\t' + tm_log['url'])
+def write_log_urls(file, logs):
+    file.write(rm_addr, + '\n\n')
+    for log in logs:
+        file.write(log['app_id'] + '\t'+ log['jm_log']['url'] + '\n')
+        for (tm_id, tm_log) in log['tm_logs'].items():
+            print tm_id, tm_log
+            file.write(tm_id + '\t' + tm_log['url'] + '\n')
+        file.write('_\t_\n')
 
 
 def keep_tracking_flink(rm_addr, options):
