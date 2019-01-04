@@ -11,14 +11,12 @@ import time
 logger = logging.getLogger("logstash")
 logstash_logger = logging.getLogger("flink")
 logger.setLevel(logging.INFO)
-l = logstash.TCPLogstashHandler("", "", version=1)
 
 
 def set_logs_from_urls(urls, old_logs):
     logs = old_logs
 
     # remove old urls and set remain urls to removable
-    logs = filter(lambda x: x['removable'] == False, logs)
     for (id, log) in logs.items():
         if log['removable']:
             logs.pop(id, None)
@@ -42,7 +40,7 @@ def get_log_messages(log):
     if r.status_code != 200:
         return None
 
-    return r.text()
+    return r.text
 
 
 def push_log_to_logstash(options):
