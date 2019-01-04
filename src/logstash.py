@@ -78,7 +78,7 @@ def push_log_to_logstash(options):
             messages = get_log_messages(log)
             position = log['position']
             for line in messages.splitlines()[position:]:
-                message = {'message': line, 'app_id': log['app_id'], 'type': log['type'], 'id': log['id']}
+                message = {'log': line, 'app_id': log['app_id'], 'type': log['type'], 'id': log['id']}
                 logstash_logger.info(json.dumps(message))
                 log['position'] += 1
 
@@ -93,15 +93,16 @@ def push_log_to_logstash(options):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Discover Flink clusters on Hadoop YARN for Prometheus')
+    parser = argparse.ArgumentParser(description='Push Flink log messages to Logstash by Flink REST API')
+    parser.add_argument('db_dir', type=str,
+                        help='(Required) If specified, this program keeps pushed last location'
+                             'of log messages in this file.')
     parser.add_argument('--ls_addr', type=str,
                         help='Specify Logstash address (host:port).'
                              'If not specified, log messages are printed out.')
     parser.add_argument('--logging-interval', type=int, default=15,
                         help='Polling interval to flink logs in seconds. '
                              'Default is 15 seconds.')
-    parser.add_argument('db-dir', type=str,
-                        help='If specified, this program keeps pushed last location of log messages in this file.')
     parser.add_argument('-d', action="store_true",
                         help='Display debugging messages (with -v).')
     parser.add_argument('-v', action="store_true",
@@ -125,7 +126,8 @@ if __name__ == '__main__':
         logstash_logger.removeHandler(handler)
     if args.ls_addr is not None:
         (host, port) = args.ls_addr.split(":")
-        logstash_logger.addHandler(logstash.LogstashHandler(host, port, version=1))
+        logstash_logger.addHandler(logstash.TCPLogstashHandler(host, port, version=1))
+        logstash_logger.setFormatter(logging.Formatter("%(message)s"))
     else:
         logstash_logger.addHandler(logging.StreamHandler(stream=sys.stdout))
 

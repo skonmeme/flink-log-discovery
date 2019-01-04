@@ -138,7 +138,7 @@ def keep_tracking_flink(rm_addr, options):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Discover Flink clusters on Hadoop YARN for Prometheus')
+    parser = argparse.ArgumentParser(description='Discover log URLs of Flink clusters on Hadoop YARN')
     parser.add_argument('rm_addr', type=str,
                         help='(required) Specify yarn.resourcemanager.webapp.address of your YARN cluster.')
     parser.add_argument('--poll-interval', type=int, default=5,
