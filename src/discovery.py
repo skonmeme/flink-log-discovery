@@ -5,11 +5,9 @@ import errno
 import json
 import logging
 import os
-import re
 import requests
 import sys
 import time
-from functools import partial
 
 logger = logging.getLogger("discovery")
 
@@ -90,17 +88,6 @@ def find_flink_log_addresses(app_id, rm_addr):
     return logs
 
 
-def generate_url_output(logs):
-    output = rm_addr + '\n'
-    for log in logs:
-        output += log['app_id'] + '\t'+ log['jm_log']['url'] + '\n'
-        for (tm_id, tm_log) in log['tm_logs'].items():
-            output += tm_id + '\t' + tm_log['url'] + '\n'
-        output += '_\t_\n'
-
-    return output
-
-
 def keep_tracking_flink(rm_addr, options):
     logger.info("start polling every " + str(args.poll_interval) + " seconds.")
 
@@ -130,13 +117,13 @@ def keep_tracking_flink(rm_addr, options):
             logs = filter(lambda x: x is not None,
                           [find_flink_log_addresses(app_id, rm_addr) for app_id in running_cur.keys()])
             if len(logs) > 0:
-                url_output = generate_url_output(logs)
+                json_log_url = json.dumps(logs)
                 if args.db_dir is not None:
                     with open(args.db_dir + '/logs.db', 'w') as file:
-                        file.write(url_output)
+                        file.write(json_log_url)
                 else:
-                    print(url_output)
-                logger.debug(url_output)
+                    print(json_log_url)
+                logger.debug(json_log_url)
         running_prev = running_cur
         time.sleep(args.poll_interval)
 
@@ -172,6 +159,6 @@ if __name__ == '__main__':
 
     if args.db_dir is not None and not os.path.isdir(args.db_dir):
         logger.error('cannot find', args.db_dir)
-        sys.exit(1)
+        sys.exit(errno.ENOENT)
 
     keep_tracking_flink(rm_addr, args)
