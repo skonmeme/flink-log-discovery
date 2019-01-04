@@ -11,6 +11,8 @@ import time
 logger = logging.getLogger("logstash")
 logstash_logger = logging.getLogger("flink")
 logger.setLevel(logging.INFO)
+l = logstash.TCPLogstashHandler("", "", version=1)
+
 
 def set_logs_from_urls(urls, old_logs):
     logs = old_logs
@@ -97,7 +99,7 @@ if __name__ == '__main__':
     parser.add_argument('db_dir', type=str,
                         help='(Required) If specified, this program keeps pushed last location'
                              'of log messages in this file.')
-    parser.add_argument('--ls_addr', type=str,
+    parser.add_argument('--ls-addr', type=str,
                         help='Specify Logstash address (host:port).'
                              'If not specified, log messages are printed out.')
     parser.add_argument('--logging-interval', type=int, default=15,
@@ -126,6 +128,8 @@ if __name__ == '__main__':
         logstash_logger.removeHandler(handler)
     if args.ls_addr is not None:
         (host, port) = args.ls_addr.split(":")
+        logger.info("Logstash: {}:{}".format(host, port))
+        requests.TCPLogstashHandler(host, port, version=1)
         logstash_logger.addHandler(logstash.TCPLogstashHandler(host, port, version=1))
         logstash_logger.setFormatter(logging.Formatter("%(message)s"))
     else:
