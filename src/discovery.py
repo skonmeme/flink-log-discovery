@@ -117,9 +117,9 @@ def keep_tracking_flink(rm_addr, options):
             removed = set(running_prev.keys()) - set(running_cur.keys())
         if len(added) + len(removed) > 0:
             logger.info('==== {} ===='.format(time.strftime("%c")))
-            logger.info("{} running apps : ".format(len(running_cur)))
-            logger.info("{} added        : ".format(added))
-            logger.info("{} removed      : ".format(removed))
+            logger.info("running apps : {}".format(len(running_cur)))
+            logger.info("  added      : {}".format(added))
+            logger.info("  removed    : {}".format(removed))
 
             # generate urls
             urls = {}
