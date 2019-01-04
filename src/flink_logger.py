@@ -129,9 +129,9 @@ if __name__ == '__main__':
     if args.ls_addr is not None:
         (host, port) = args.ls_addr.split(":")
         logger.info("Logstash: {}:{}".format(host, port))
-        requests.TCPLogstashHandler(host, port, version=1)
-        logstash_logger.addHandler(logstash.TCPLogstashHandler(host, port, version=1))
-        logstash_logger.setFormatter(logging.Formatter("%(message)s"))
+        logstash_handler = logstash.TCPLogstashHandler(host, port, version=1)
+        logstash_handler.setFormatter(logging.Formatter("%(message)s"))
+        logstash_logger.addHandler(logstash_handler)
     else:
         logstash_logger.addHandler(logging.StreamHandler(stream=sys.stdout))
 
