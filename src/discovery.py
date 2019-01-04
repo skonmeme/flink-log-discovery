@@ -41,9 +41,9 @@ def get_taskmanager_ids(jm_url):
     return [tm['id'] for tm in decoded['taskmanagers']]
 
 
-def find_flink_log_addresses(app_id, rm_addr):
+def find_flink_log_urls(app_id, rm_addr):
     count = 1
-    logs = {'app_id': app_id}
+    urls = {}
 
     while True:
         if count > 10:
@@ -59,14 +59,11 @@ def find_flink_log_addresses(app_id, rm_addr):
 
         jm_url = app_info['trackingUrl']
         jm_url = jm_url[:-1] if jm_url.endswith('/') else jm_url
-        logs['jm_url'] = {'url': jm_url}
 
         overview = get_flink_cluster_overview(jm_url)
         version = overview['flink-version']
         taskmanagers = overview['taskmanagers']
         logger.debug("Flink overview: {}\n  Version: {}\n  Task managers: {}".format(overview, version, taskmanagers))
-
-        logs['jm_log'] = {'url': jm_url + "/jobmanager/log"}
 
         if app_info['runningContainers'] == 1:
             logger.info("runningContainers(%d) is 1" % (app_info['runningContainers'],))
@@ -80,16 +77,25 @@ def find_flink_log_addresses(app_id, rm_addr):
             time.sleep(1)
             continue
 
-        tm_ids = get_taskmanager_ids(jm_url)
-        logs['tm_logs'] = { tm_id: {'url': jm_url + "/taskmanagers/" + tm_id + "/log"} for tm_id in tm_ids }
-        break
-    logger.debug(logs)
+        jm_log = {'app_id': app_id, 'type': 'jobmanager', 'id': app_id, 'removable': False,
+                  'url': jm_url + '/jobmanager/log', 'position': 0}
+        urls[app_id] = jm_log
+        logger.debug(jm_log)
 
-    return logs
+        tm_ids = get_taskmanager_ids(jm_url)
+        for tm_id in tm_ids:
+            tm_log = {'app_id': app_id, 'type': 'taskmanager', 'id': tm_id, 'removable': False,
+                      'url': jm_url + "/taskmanagers/" + tm_id + "/log", 'position': 0}
+            urls[tm_id] = tm_log
+            logger.debug(tm_log)
+        break
+    logger.debug(urls)
+
+    return urls
 
 
 def keep_tracking_flink(rm_addr, options):
-    logger.info("start polling every " + str(args.poll_interval) + " seconds.")
+    logger.info("start polling every " + str(options.poll_interval) + " seconds.")
 
     running_prev = {}
     while True:
@@ -98,9 +104,9 @@ def keep_tracking_flink(rm_addr, options):
         removed = set()
         r = requests.get(rm_addr + '/ws/v1/cluster/apps')
         if r.status_code != 200:
-            logger.error("Failed to connect to the server."
-                         "The status code is " + r.status_code)
-            break
+            logger.error("Failed to connect to the server. "
+                         "The status code is {} for {}".format(r.status_code, rm_addr + '/ws/v1/cluster/apps'))
+            sys.exit(errno.ECONNREFUSED)
         decoded = r.json()
         apps = decoded['apps']['app']
         for app in apps:
@@ -114,18 +120,21 @@ def keep_tracking_flink(rm_addr, options):
             logger.info("{} running apps : ".format(len(running_cur)))
             logger.info("{} added        : ".format(added))
             logger.info("{} removed      : ".format(removed))
-            logs = filter(lambda x: x is not None,
-                          [find_flink_log_addresses(app_id, rm_addr) for app_id in running_cur.keys()])
-            if len(logs) > 0:
-                json_log_url = json.dumps(logs)
-                if args.db_dir is not None:
-                    with open(args.db_dir + '/logs.db', 'w') as file:
-                        file.write(json_log_url)
+
+            # generate urls
+            urls = {}
+            for app_id in running_cur.keys():
+                urls.update(find_flink_log_urls(app_id, rm_addr))
+            if len(urls) > 0:
+                json_log_urls = json.dumps(urls)
+                if options.db_dir is not None:
+                    with open(options.db_dir + '/urls.db', 'w') as file:
+                        file.write(json_log_urls)
                 else:
-                    print(json_log_url)
-                logger.debug(json_log_url)
+                    print(json_log_urls)
+                logger.debug(json_log_urls)
         running_prev = running_cur
-        time.sleep(args.poll_interval)
+        time.sleep(options.poll_interval)
 
 
 if __name__ == '__main__':
@@ -152,6 +161,8 @@ if __name__ == '__main__':
     else:
         logger.setLevel(logging.INFO)
     if args.v:
+        for handler in logger.handlers:
+            logger.removeHandler(handler)
         logger.addHandler(logging.StreamHandler(stream=sys.stderr))
 
     rm_addr = args.rm_addr if "://" in args.rm_addr else "http://" + args.rm_addr
