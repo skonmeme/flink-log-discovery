@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import errno
 import json
 import logging
@@ -59,14 +60,15 @@ def push_log_to_logstash(options):
         old_logs = {}
     logger.debug("Initial log URL information : {}".format(old_logs))
     # count
-    count = 0
+    error_count = 0
+    log_count = 0
     while True:
         if os.path.exists(urls_path):
             with open(urls_path, 'r') as file:
                 urls = json.loads(file.read())
         else:
-            count += 1
-            if count >= 600:
+            error_count += 1
+            if error_count >= 600:
                 logger.error("No log URL information in 600s)")
                 sys.exit(errno.ENOENT)
             time.sleep(1)
@@ -82,11 +84,16 @@ def push_log_to_logstash(options):
                 message = {'log': line, 'app_id': log['app_id'], 'type': log['type'], 'id': log['id']}
                 logstash_logger.info(json.dumps(message))
                 log['position'] += 1
+                log_count += 1
 
         if len(logs) > 0:
             with open(logs_path, 'w') as file:
                 file.write(json.dumps(logs))
-        count = 0
+
+        logger.info("{} log messages at {}".format(log_count,datetime.datetime.now()))
+
+        error_count = 0
+        log_count = 0
         old_logs = logs
         old_urls = urls
 
