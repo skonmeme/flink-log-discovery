@@ -9,8 +9,9 @@ import sys
 import time
 
 logger = logging.getLogger("logstash")
-logstash_logger = logging.getLogger("flink")
 logger.setLevel(logging.INFO)
+logstash_logger = logging.getLogger("flink")
+logstash_logger.setLevel(logging.INFO)
 
 
 def set_logs_from_urls(urls, old_logs):
@@ -127,7 +128,7 @@ if __name__ == '__main__':
     if args.ls_addr is not None:
         (host, port) = args.ls_addr.split(":")
         logger.info("Logstash: {}:{}".format(host, port))
-        logstash_handler = logstash.TCPLogstashHandler(host, port, version=1)
+        logstash_handler = logstash.TCPLogstashHandler(host, int(port), version=1)
         logstash_handler.setFormatter(logging.Formatter("%(message)s"))
         logstash_logger.addHandler(logstash_handler)
     else:
