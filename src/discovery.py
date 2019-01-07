@@ -123,7 +123,7 @@ def keep_tracking_flink(rm_addr, options):
 
             # generate urls
             urls = {}
-            if len(running_cur.keys) > 0:
+            if len(running_cur.keys()) > 0:
                 for app_id in running_cur.keys():
                     urls.update(find_flink_log_urls(app_id, rm_addr))
             if len(urls) > 0:
