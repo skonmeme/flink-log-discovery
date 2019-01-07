@@ -153,7 +153,6 @@ if __name__ == '__main__':
                         help='Display debugging messages (with -v).')
     parser.add_argument('-v', action="store_true",
                         help='Display verbose messages.')
-
     args = parser.parse_args()
 
     if args.d:
