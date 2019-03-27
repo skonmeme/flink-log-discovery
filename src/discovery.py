@@ -25,6 +25,7 @@ def get_flink_cluster_overview(jm_url):
     r = requests.get(jm_url+'/overview')
     if r.status_code != 200:
         return {}
+    
     decoded = r.json()
     return decoded
 
@@ -46,15 +47,15 @@ def find_flink_log_urls(app_id, rm_addr):
     urls = {}
 
     while True:
-        if count > 10:
-            return None
+        if count > args.retry:
+            return {}
 
         app_info = get_yarn_application_info(app_id, rm_addr)
         logger.debug("Application ID: {}\nApplication Info: {}".format(app_id, app_info))
         if 'trackingUrl' not in app_info:
             logger.info("Application ID: {} does not have tackingUrl".format(app_id, count))
             count += 1
-            time.sleep(1)
+            time.sleep(args.wait)
             continue
 
         jm_url = app_info['trackingUrl']
@@ -108,7 +109,9 @@ def keep_tracking_flink(rm_addr, options):
                          "The status code is {} for {}".format(r.status_code, rm_addr + '/ws/v1/cluster/apps'))
             sys.exit(errno.ECONNREFUSED)
         decoded = r.json()
-        apps = decoded['apps']['app']
+
+        # find jobs of Apache Flink only
+        apps = list(filter(lambda app: app['applicationType'] == 'Apache Flink', decoded['apps']['app']))
         for app in apps:
             if app['state'].lower() == 'running':
                 running_cur[app['id']] = app
@@ -123,9 +126,8 @@ def keep_tracking_flink(rm_addr, options):
 
             # generate urls
             urls = {}
-            if len(running_cur.keys()) > 0:
-                for app_id in running_cur.keys():
-                    urls.update(find_flink_log_urls(app_id, rm_addr))
+            for app_id in running_cur.keys():
+                urls.update(find_flink_log_urls(app_id, rm_addr))
             if len(urls) > 0:
                 json_log_urls = json.dumps(urls)
                 if options.db_dir is not None:
@@ -142,13 +144,19 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Discover log URLs of Flink clusters on Hadoop YARN')
     parser.add_argument('rm_addr', type=str,
                         help='(required) Specify yarn.resourcemanager.webapp.address of your YARN cluster.')
-    parser.add_argument('--poll-interval', type=int, default=5,
+    parser.add_argument('--poll-interval', type=int, default=15,
                         help='Polling interval to YARN in seconds '
                              'to check applications that are newly added or recently finished. '
-                             'Default is 60 seconds.')
+                             'Default is 15 seconds.')
     parser.add_argument('--db-dir', type=str,
                         help='If specified, this program keeps tracking log URLs in this directory. '
                              'If not specified, discovered log URLs are printed out.')
+    parser.add_argument('--wait', type=int, default=10,
+                        help='When connection to Apache Flink job manager is not available, '
+                             'this program reties after given time (default 10s). ')
+    parser.add_argument('--retry', type=int, default=12,
+                        help='When connection to Apache Flink job manager is not available, '
+                             'this program reties given counts (default 12). ')
     parser.add_argument('-d', action="store_true",
                         help='Display debugging messages (with -v).')
     parser.add_argument('-v', action="store_true",
